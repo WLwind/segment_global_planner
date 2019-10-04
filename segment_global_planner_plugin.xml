@@ -1,0 +1,7 @@
+<library path="lib/libsegment_global_planner">
+  <class name="segment_global_planner/SegmentGlobalPlanner" type="segment_global_planner::SegmentGlobalPlanner" base_class_type="nav_core::BaseGlobalPlanner">
+    <description>
+      A global planner for line tracking.
+    </description>
+  </class>
+</library>
