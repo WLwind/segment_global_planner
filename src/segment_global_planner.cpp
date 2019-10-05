@@ -14,28 +14,80 @@ SegmentGlobalPlanner::SegmentGlobalPlanner():nav_core::BaseGlobalPlanner()
 
 bool SegmentGlobalPlanner::makePlan(const geometry_msgs::PoseStamped& start, const geometry_msgs::PoseStamped& goal, std::vector<geometry_msgs::PoseStamped>& plan)
 {
-    nav_msgs::Path gui_path;//path to display
-    if(m_trajectory_path.size()!=0)
+    m_current_pose=start;
+    bool new_goal=!m_got_first_goal||m_current_goal.pose.position.x!=goal.pose.position.x||m_current_goal.pose.position.y!=goal.pose.position.y||m_current_goal.header.frame_id!=global_frame_;//whether the goal is a new one
+    if(new_goal)
     {
-        trimTrajectory(start);
-        m_trajectory_path.insert(m_trajectory_path.begin(),start);//push start pose
-        m_trajectory_path.push_back(goal);//push goal pose
+        m_child_goals.push(goal);//add new child goal
+        m_current_goal=goal;
     }
-    else
+    if(isGoalReached())//reaches child goals
     {
-        ROS_INFO("New trajectory.");
-        m_trajectory_path.push_back(start);
-        m_trajectory_path.push_back(goal);
-    }
-    insertPoints();//fill the interval of long segments
-    plan=m_trajectory_path;
-    if(current_goal.pose.position.x!=goal.pose.position.x||current_goal.pose.position.y!=goal.pose.position.y)
-    {
-        current_goal.pose.position.x=goal.pose.position.x;//update display
-        current_goal.pose.position.y=goal.pose.position.y;
-        for(auto trj_pose:m_trajectory_path)//fill the display path
+        ROS_INFO("Reached child goal.");
+        geometry_msgs::PoseStamped last_child_goal;
+        last_child_goal.header.frame_id="empty";
+        if(m_trajectory_path.size()!=0)
         {
-            gui_path.poses.push_back(trj_pose);
+            m_trajectory_path.clear();
+        }
+        if(!m_child_goals.empty())
+        {
+            if(m_got_first_goal)
+            {
+                last_child_goal=m_segment_goal;
+            }
+            m_segment_goal=m_child_goals.front();//update segment goal
+            m_child_goals.pop();
+        }
+        m_trajectory_path.push_back(last_child_goal.header.frame_id!="empty"?last_child_goal:m_current_pose);
+        m_trajectory_path.push_back(m_segment_goal);
+        insertPoints();//fill the intervals of long segments
+    }
+    else//doesn't reach child goals
+    {
+        if(m_trajectory_path.size()>=2)
+        {
+            trimTrajectory(start);//trim segment
+        }
+        if(m_trajectory_path.size()<2)
+        {
+            if(new_goal&&m_trajectory_path.size()==0)//robot is far from unreached segment
+            {
+                while(m_child_goals.size()>1)//clear the queue
+                {
+                    m_child_goals.pop();
+                }
+                m_segment_goal=goal;
+            }
+            ROS_INFO("New trajectory.");
+            if(m_trajectory_path.size()!=0)
+            {
+                m_trajectory_path.clear();
+            }
+            m_trajectory_path.push_back(start);
+            m_trajectory_path.push_back(m_segment_goal);
+            insertPoints();//fill the intervals of long segments
+        }
+    }
+    m_got_first_goal=true;
+    plan=m_trajectory_path;
+
+    if(new_goal)//for display
+    {
+        nav_msgs::Path gui_path;//path to display
+        gui_path.poses.push_back(m_current_pose);
+        gui_path.poses.push_back(m_segment_goal);
+        geometry_msgs::PoseStamped pose_to_display;
+        int queue_size=m_child_goals.size();
+        if(queue_size!=0)
+        {
+            for(int i=0;i<queue_size;i++)//fill the display path
+            {
+                pose_to_display=m_child_goals.front();
+                gui_path.poses.push_back(pose_to_display);
+                m_child_goals.push(pose_to_display);//put it at the end
+                m_child_goals.pop();
+            }
         }
         gui_path.header.frame_id=global_frame_;
         plan_pub_.publish(gui_path);
@@ -48,8 +100,10 @@ void SegmentGlobalPlanner::initialize(std::string name, costmap_2d::Costmap2DROS
     ROS_INFO("Initializing clear_all_costmaps_recovery plugin!");
     ros::NodeHandle private_nh("~/" + name);
     plan_pub_=private_nh.advertise<nav_msgs::Path>("plan", 1);
+    m_dynamic_config_server.reset(new dynamic_reconfigure::Server<SegmentGlobalPlannerConfig>(private_nh));//setup dynamic reconfigure
+    m_dynamic_config_server->setCallback(boost::bind(&SegmentGlobalPlanner::reconfigureCB, this, _1, _2));
+    m_clear_trajectory_server=private_nh.advertiseService("clear_trajectory",&SegmentGlobalPlanner::clearTrajectoryCB,this);//setup clear trajectory service
     global_frame_ = costmap_ros->getGlobalFrameID();
-    m_trajectory_path.clear();
     return;
 }
 
@@ -58,29 +112,30 @@ void SegmentGlobalPlanner::trimTrajectory(const geometry_msgs::PoseStamped& star
     double p2p,p2l,min_p2l=9999.9;
     for(int i=0;i<m_trajectory_path.size();i++)//segments are one less than poses 
     {
+        if(i==m_trajectory_path.size()-1)//the start point is far from all segments
+        {
+            ROS_INFO("Clear trajectory.");
+            m_trajectory_path.clear();
+            break;
+        }
         p2p=sq_distance(start,m_trajectory_path[i]);
         p2l=distPointToSegment(start,m_trajectory_path[i],m_trajectory_path[i+1]);
-        if(p2p<m_threshold_point_on_line*m_threshold_point_on_line||p2l<m_threshold_point_on_line)//distance shorter than the threshold
+        if(p2p<m_threshold_point_on_line*m_threshold_point_on_line||p2l<m_threshold_point_on_line)//distance is shorter than the threshold
         {
             p2p=sqrt(p2p);
-            if(std::min(p2p,p2l)<=min_p2l)//find min distance
+            if(std::min(p2p,p2l)<min_p2l)//find min distance
             {
                 min_p2l=std::min(p2p,p2l);
             }
             else//when distance becomes larger
             {
                 ROS_INFO("Update trajectory.");
-                m_trajectory_path.erase(m_trajectory_path.begin(),m_trajectory_path.begin()+i+1);//erase the points behind the robot [begin,i+1)
+                m_trajectory_path.erase(m_trajectory_path.begin(),m_trajectory_path.begin()+(i));//erase the points behind the robot [begin,i-1)
                 break;
             }
         }
-        else if(i==m_trajectory_path.size()-1)//the start point is far from all segments
-        {
-            ROS_INFO("Clear trajectory.");
-            m_trajectory_path.clear();
-        }
     }
-    
+    return;
 }
 
 double SegmentGlobalPlanner::distPointToSegment(const geometry_msgs::PoseStamped& p0,const geometry_msgs::PoseStamped& s1, const geometry_msgs::PoseStamped& s2)
@@ -112,7 +167,6 @@ double SegmentGlobalPlanner::sq_distance(const geometry_msgs::PoseStamped& p1, c
 
 void SegmentGlobalPlanner::insertPoints()
 {
-    bool last_corner=false;
     for(int i=0;i<m_trajectory_path.size()-1;i++)//no need to judge the last pose
     {
         double dist_2_point=sq_distance(m_trajectory_path[i],m_trajectory_path[i+1]);
@@ -126,16 +180,41 @@ void SegmentGlobalPlanner::insertPoints()
             point_to_insert.pose.orientation=m_trajectory_path[i].pose.orientation;
             point_to_insert.header.frame_id=global_frame_;
             m_trajectory_path.insert(m_trajectory_path.begin()+i+1,point_to_insert);
-            if(last_corner==false&&i>1)//reshape the last corner
-            {
-                m_trajectory_path.erase(m_trajectory_path.begin()+i);
-                i--;
-                last_corner=true;
-                std::cout<<"last_corner"<<std::endl;
-            }
-
         }
     }
     return;
 }
+
+bool SegmentGlobalPlanner::isGoalReached()
+{
+    if(!m_got_first_goal||sq_distance(m_current_pose,m_segment_goal)<=m_goal_threshold*m_goal_threshold)
+    {
+        return true;
+    }
+    return false;
 }
+
+void SegmentGlobalPlanner::reconfigureCB(segment_global_planner::SegmentGlobalPlannerConfig& config, uint32_t level)
+{
+    ROS_INFO("dynamic_reconfigure updates.");
+    m_threshold_point_on_line=config.threshold_point_on_line;
+    m_point_interval=config.point_interval;
+    m_goal_threshold=config.child_goal_threshold;
+    return;
+}
+
+bool SegmentGlobalPlanner::clearTrajectoryCB(std_srvs::Empty::Request& request, std_srvs::Empty::Response& response)
+{
+    ROS_WARN("Clearing trajectory!");
+    m_current_goal.pose.position.x=m_current_goal.pose.position.y=0.0;
+    m_current_goal.header.frame_id="empty";
+    while(m_child_goals.size()!=0)//clear the queue
+    {
+        m_child_goals.pop();
+    }
+    m_trajectory_path.clear();
+    m_got_first_goal=false;//reset the first time mark
+    return true;
+}
+
+}//namespace end

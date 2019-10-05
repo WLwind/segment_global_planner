@@ -14,6 +14,7 @@ find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
   nav_msgs
   tf
+  dynamic_reconfigure
 )
 
 ## System dependencies are found with CMake's conventions
@@ -91,10 +92,10 @@ find_package(catkin REQUIRED COMPONENTS
 ##     and list every .cfg file to be processed
 
 ## Generate dynamic reconfigure parameters in the 'cfg' folder
-# generate_dynamic_reconfigure_options(
-#   cfg/DynReconf1.cfg
+generate_dynamic_reconfigure_options(
+   cfg/SegmentGlobalPlannerParams.cfg
 #   cfg/DynReconf2.cfg
-# )
+)
 
 ###################################
 ## catkin specific configuration ##
@@ -212,15 +213,14 @@ include_directories(
 
 add_library(segment_global_planner
   src/segment_global_planner.cpp
-  include/segment_global_planner/segment_global_planner.h
 )
-add_dependencies(segment_global_planner ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(segment_global_planner ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencfg)
 target_link_libraries(segment_global_planner
   ${catkin_LIBRARIES}
 )
 
 add_executable(publish_trajectory_70
-  src/publish_trajectory_70.cpp
+  src/test/publish_trajectory_70.cpp
 )
 add_dependencies(publish_trajectory_70 ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(publish_trajectory_70
