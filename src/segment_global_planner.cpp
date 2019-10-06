@@ -70,7 +70,11 @@ bool SegmentGlobalPlanner::makePlan(const geometry_msgs::PoseStamped& start, con
         }
     }
     m_got_first_goal=true;
-    plan=m_trajectory_path;
+    if(plan.size()!=0)
+    {
+        plan.clear();
+    }
+    std::copy(m_trajectory_path.begin(),m_trajectory_path.end(),std::back_inserter(plan));//copy the trajectory to plan
 
     if(new_goal)//for display
     {
@@ -110,16 +114,18 @@ void SegmentGlobalPlanner::initialize(std::string name, costmap_2d::Costmap2DROS
 void SegmentGlobalPlanner::trimTrajectory(const geometry_msgs::PoseStamped& start)
 {
     double p2p,p2l,min_p2l=9999.9;
-    for(int i=0;i<m_trajectory_path.size();i++)//segments are one less than poses 
+    for(auto itr=m_trajectory_path.begin();itr!=m_trajectory_path.end();itr++)//segments are one less than poses 
     {
-        if(i==m_trajectory_path.size()-1)//the start point is far from all segments
+        if(itr==--m_trajectory_path.end())//the start point is far from all segments
         {
             ROS_INFO("Clear trajectory.");
             m_trajectory_path.clear();
             break;
         }
-        p2p=sq_distance(start,m_trajectory_path[i]);
-        p2l=distPointToSegment(start,m_trajectory_path[i],m_trajectory_path[i+1]);
+        p2p=sq_distance(start,*itr);
+        auto itr_next=++itr;
+        itr--;
+        p2l=distPointToSegment(start,*itr,*itr_next);
         if(p2p<m_threshold_point_on_line*m_threshold_point_on_line||p2l<m_threshold_point_on_line)//distance is shorter than the threshold
         {
             p2p=sqrt(p2p);
@@ -130,7 +136,8 @@ void SegmentGlobalPlanner::trimTrajectory(const geometry_msgs::PoseStamped& star
             else//when distance becomes larger
             {
                 ROS_INFO("Update trajectory.");
-                m_trajectory_path.erase(m_trajectory_path.begin(),m_trajectory_path.begin()+(i));//erase the points behind the robot [begin,i-1)
+                m_trajectory_path.erase(m_trajectory_path.begin(),--itr);//erase the points behind the robot [begin,i-1)
+                itr++;
                 break;
             }
         }
@@ -167,19 +174,21 @@ double SegmentGlobalPlanner::sq_distance(const geometry_msgs::PoseStamped& p1, c
 
 void SegmentGlobalPlanner::insertPoints()
 {
-    for(int i=0;i<m_trajectory_path.size()-1;i++)//no need to judge the last pose
+    for(auto itr=m_trajectory_path.begin();itr!=--m_trajectory_path.end();itr++)//no need to judge the last pose
     {
-        double dist_2_point=sq_distance(m_trajectory_path[i],m_trajectory_path[i+1]);
+        auto itr_next=++itr;
+        itr--;
+        double dist_2_point=sq_distance(*itr,*itr_next);
         if(dist_2_point>(m_point_interval+0.01)*(m_point_interval+0.01))
         {
             dist_2_point=sqrt(dist_2_point);
             double proportion=m_point_interval/dist_2_point;
             geometry_msgs::PoseStamped point_to_insert;
-            point_to_insert.pose.position.x=m_trajectory_path[i].pose.position.x+(m_trajectory_path[i+1].pose.position.x-m_trajectory_path[i].pose.position.x)*proportion;
-            point_to_insert.pose.position.y=m_trajectory_path[i].pose.position.y+(m_trajectory_path[i+1].pose.position.y-m_trajectory_path[i].pose.position.y)*proportion;
-            point_to_insert.pose.orientation=m_trajectory_path[i].pose.orientation;
+            point_to_insert.pose.position.x=itr->pose.position.x+(itr_next->pose.position.x-itr->pose.position.x)*proportion;
+            point_to_insert.pose.position.y=itr->pose.position.y+(itr_next->pose.position.y-itr->pose.position.y)*proportion;
+            point_to_insert.pose.orientation=itr->pose.orientation;
             point_to_insert.header.frame_id=global_frame_;
-            m_trajectory_path.insert(m_trajectory_path.begin()+i+1,point_to_insert);
+            m_trajectory_path.insert(itr_next,point_to_insert);
         }
     }
     return;
@@ -205,15 +214,15 @@ void SegmentGlobalPlanner::reconfigureCB(segment_global_planner::SegmentGlobalPl
 
 bool SegmentGlobalPlanner::clearTrajectoryCB(std_srvs::Empty::Request& request, std_srvs::Empty::Response& response)
 {
-    ROS_WARN("Clearing trajectory!");
     m_current_goal.pose.position.x=m_current_goal.pose.position.y=0.0;
     m_current_goal.header.frame_id="empty";
     while(m_child_goals.size()!=0)//clear the queue
     {
         m_child_goals.pop();
     }
-    m_trajectory_path.clear();
+    m_trajectory_path.clear();//clear trajectory
     m_got_first_goal=false;//reset the first time mark
+    ROS_WARN("Trajectory has been cleared!");
     return true;
 }
 

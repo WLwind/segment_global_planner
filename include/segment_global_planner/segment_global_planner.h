@@ -6,6 +6,7 @@
 #include <geometry_msgs/Point.h>
 #include <nav_msgs/Path.h>
 #include <vector>
+#include <list>
 #include <string>
 #include <queue>
 #include <segment_global_planner/SegmentGlobalPlannerConfig.h>
@@ -33,9 +34,9 @@ private:
     
     double m_threshold_point_on_line{0.3};//to determin whether a point is on the line
     double m_point_interval{0.05};//distance between two points on a segment
-    double m_goal_threshold{0.1};//goal threthold
+    double m_goal_threshold{0.15};//goal threthold
     bool m_got_first_goal{false};//has the planner received the first goal
-    std::vector<geometry_msgs::PoseStamped> m_trajectory_path;//stors current segment trajectory
+    std::list<geometry_msgs::PoseStamped> m_trajectory_path;//stors current segment trajectory
     std::string global_frame_{"map"};//frame id
     ros::Publisher plan_pub_;//gui publisher
     geometry_msgs::PoseStamped m_current_pose,m_current_goal,m_segment_goal;//current robot pose, current trajectory goal and segment goal
