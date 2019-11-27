@@ -17,19 +17,73 @@ namespace segment_global_planner
 class SegmentGlobalPlanner:public nav_core::BaseGlobalPlanner
 {
 public:
+    /**
+    * @brief Constructor
+    */
     SegmentGlobalPlanner();
+    /**
+    * @brief Override nav_core::BaseGlobalPlanner::makePlan()
+    * @param start The start pose 
+    * @param goal The goal pose 
+    * @param plan The plan... filled by the planner
+    * @return True if a valid plan was found, false otherwise
+    */
     bool makePlan(const geometry_msgs::PoseStamped& start, const geometry_msgs::PoseStamped& goal, std::vector<geometry_msgs::PoseStamped>& plan) override;
+    /**
+    * @brief Override nav_core::BaseGlobalPlanner::initialize()
+    * @param name The name of this planner
+    * @param costmap_ros A pointer to the ROS wrapper of the costmap to use for planning
+    */
     void initialize(std::string name, costmap_2d::Costmap2DROS* costmap_ros) override;
+    /**
+    * @brief Destructor
+    */
     virtual ~SegmentGlobalPlanner(){}
 
 private:
-    void trimTrajectory(const geometry_msgs::PoseStamped& start);//trim the points that are behind the robot
-    double sq_distance(const geometry_msgs::PoseStamped& p1, const geometry_msgs::PoseStamped& p2);//dist^2
-    double distPointToSegment(const geometry_msgs::PoseStamped& p0,const geometry_msgs::PoseStamped& s1, const geometry_msgs::PoseStamped& s2);//calculate diatance from a point(p0) to a line segment(s1 s2)
-    double distPointToPoint(const geometry_msgs::PoseStamped& p1, const geometry_msgs::PoseStamped& p2);//calculate diatance from a point to a point
-    void insertPoints();//insert points on the segment
-    bool isGoalReached();//has the robot reached the segment goal
-    void reconfigureCB(segment_global_planner::SegmentGlobalPlannerConfig& config, uint32_t level);//dynamic_reconfigure callback
+    /**
+    * @brief Trim the points that are behind the robot
+    * @param start Start pose of the trajectory
+    */
+    void trimTrajectory(const geometry_msgs::PoseStamped& start);
+    /**
+    * @brief Get squared the distance between p1 and p2
+    * @param p1 p1 pose
+    * @param p2 p2 pose
+    * @return Squared distance
+    */
+    double sq_distance(const geometry_msgs::PoseStamped& p1, const geometry_msgs::PoseStamped& p2);
+    /**
+    * @brief Calculate diatance from a point(p0) to a line segment(s1 s2)
+    * @param p0 p0 pose
+    * @param s1 s1 pose
+    * @param s2 s2 pose
+    * @return Distance
+    */
+    double distPointToSegment(const geometry_msgs::PoseStamped& p0,const geometry_msgs::PoseStamped& s1, const geometry_msgs::PoseStamped& s2);
+    /**
+    * @brief Calculate diatance from a point to a point
+    * @param p1 p1 pose
+    * @param p2 p2 pose
+    * @return Distance
+    */
+    double distPointToPoint(const geometry_msgs::PoseStamped& p1, const geometry_msgs::PoseStamped& p2);
+    /**
+    * @brief Insert points on the segment
+    */
+    void insertPoints();
+    /**
+    * @brief Judge whether the robot reached the segment goal or not
+    * @return True if the robot reached the goal, false otherwise
+    */
+    bool isGoalReached();
+    /**
+    * @brief Dynamic_reconfigure callback
+    */
+    void reconfigureCB(segment_global_planner::SegmentGlobalPlannerConfig& config, uint32_t level);
+    /**
+    * @brief Clear trajectory server callback
+    */
     bool clearTrajectoryCB(std_srvs::Empty::Request& request, std_srvs::Empty::Response& response);//clear trajectory server callback
     
     double m_threshold_point_on_line{0.3};//to determin whether a point is on the line
