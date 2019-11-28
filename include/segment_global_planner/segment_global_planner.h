@@ -14,6 +14,9 @@
 
 namespace segment_global_planner
 {
+    /**
+    * This class is an implementation of nav_core::BaseGlobalPlanner from standard ROS navigation package. It can help users to directly set line segments using RViz and let the robot follow the segments sequentially.
+    */
 class SegmentGlobalPlanner:public nav_core::BaseGlobalPlanner
 {
 public:
@@ -78,25 +81,25 @@ private:
     */
     bool isGoalReached();
     /**
-    * @brief Dynamic_reconfigure callback
+    * @brief Dynamic_reconfigure callback function
     */
     void reconfigureCB(segment_global_planner::SegmentGlobalPlannerConfig& config, uint32_t level);
     /**
-    * @brief Clear trajectory server callback
+    * @brief Clear trajectory server callback function
     */
     bool clearTrajectoryCB(std_srvs::Empty::Request& request, std_srvs::Empty::Response& response);//clear trajectory server callback
     
-    double m_threshold_point_on_line{0.3};//to determin whether a point is on the line
+    double m_threshold_point_on_line{0.3};//to determine whether a point is on the line
     double m_point_interval{0.05};//distance between two points on a segment
-    double m_goal_threshold{0.15};//goal threthold
-    bool m_got_first_goal{false};//has the planner received the first goal
-    std::list<geometry_msgs::PoseStamped> m_trajectory_path;//stors current segment trajectory
-    std::string global_frame_{"map"};//frame id
-    ros::Publisher plan_pub_;//gui publisher
+    double m_goal_threshold{0.15};//goal threshold
+    bool m_got_first_goal{false};//whether the planner received the first goal
+    std::list<geometry_msgs::PoseStamped> m_trajectory_path;//stores current segment trajectory
+    std::string global_frame_{"map"};//global frame id
+    ros::Publisher plan_pub_;//GUI publisher
     geometry_msgs::PoseStamped m_current_pose,m_current_goal,m_segment_goal;//current robot pose, current trajectory goal and segment goal
-    std::queue<geometry_msgs::PoseStamped> m_child_goals;//stors every child goals
+    std::queue<geometry_msgs::PoseStamped> m_child_goals;//stores all child goals
     std::unique_ptr<dynamic_reconfigure::Server<SegmentGlobalPlannerConfig>> m_dynamic_config_server;//server pointer for dynamic reconfigure
-    ros::ServiceServer m_clear_trajectory_server;//service for clear trajectory
+    ros::ServiceServer m_clear_trajectory_server;//service for clearing trajectory
 };
 
 }//end namespace
