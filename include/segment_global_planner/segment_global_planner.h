@@ -3,7 +3,6 @@
 #include <ros/ros.h>
 #include <nav_core/base_global_planner.h>
 #include <dynamic_reconfigure/server.h>
-#include <geometry_msgs/Point.h>
 #include <nav_msgs/Path.h>
 #include <vector>
 #include <list>
@@ -79,7 +78,7 @@ private:
     * @brief Judge whether the robot reached the segment goal or not
     * @return True if the robot reached the goal, false otherwise
     */
-    bool isGoalReached();
+    bool isChildGoalReached();
     /*
     * @brief Set the angle to the pose
     * @param pose The pose that you want to set the ange for
@@ -93,19 +92,25 @@ private:
     /**
     * @brief Clear trajectory server callback function
     */
-    bool clearTrajectoryCB(std_srvs::Empty::Request& request, std_srvs::Empty::Response& response);//clear trajectory server callback
+    bool clearTrajectoryCB(std_srvs::Empty::Request& request, std_srvs::Empty::Response& response);
+    /**
+    * @brief clicked_point topic subscriber callback function
+    */
+    void clickedPointCB(const geometry_msgs::PointStamped::ConstPtr& ptr);
     
     double m_threshold_point_on_line{0.3};//to determine whether a point is on the line
     double m_point_interval{0.05};//distance between two points on a segment
-    double m_goal_threshold{0.15};//goal threshold
+    double m_goal_threshold{0.2};//goal threshold
     bool m_got_first_goal{false};//whether the planner received the first goal
     std::list<geometry_msgs::PoseStamped> m_trajectory_path;//stores current segment trajectory
     std::string global_frame_{"map"};//global frame id
     ros::Publisher plan_pub_;//GUI publisher
-    geometry_msgs::PoseStamped m_current_pose,m_current_goal,m_segment_goal;//current robot pose, current trajectory goal and segment goal
+    geometry_msgs::PoseStamped m_current_pose,m_current_goal,m_segment_goal;//current robot pose, current global planner goal (final goal) and current child goal (goal of a segment that is heading to)
     std::queue<geometry_msgs::PoseStamped> m_child_goals;//stores all child goals
     std::unique_ptr<dynamic_reconfigure::Server<SegmentGlobalPlannerConfig>> m_dynamic_config_server;//server pointer for dynamic reconfigure
     ros::ServiceServer m_clear_trajectory_server;//service for clearing trajectory
+    ros::Publisher m_pose_from_clicked_point_pub{ros::NodeHandle().advertise<geometry_msgs::PoseStamped>("/move_base_simple/goal",10)};//publish the goal pose when the clicked_point has been received
+    ros::Subscriber m_clicked_point_sub{ros::NodeHandle().subscribe<geometry_msgs::PointStamped>("/clicked_point",10,&SegmentGlobalPlanner::clickedPointCB,this)};//rviz clicked_point subscriber
 };
 
 }//end namespace

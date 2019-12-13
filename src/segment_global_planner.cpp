@@ -19,15 +19,20 @@ bool SegmentGlobalPlanner::makePlan(const geometry_msgs::PoseStamped& start, con
     bool new_goal=!m_got_first_goal||m_current_goal.pose.position.x!=goal.pose.position.x||m_current_goal.pose.position.y!=goal.pose.position.y||m_current_goal.header.frame_id!=global_frame_;//whether the goal is a new one
     if(new_goal)
     {
+        if(!m_child_goals.empty())
+        {
+            geometry_msgs::PoseStamped* old_last_child_goal=&m_child_goals.back();
+            setAngle(old_last_child_goal,atan2(goal.pose.position.y-old_last_child_goal->pose.position.y,goal.pose.position.x-old_last_child_goal->pose.position.x));//set the orientation of the old goal vector from it to the new goal
+        }
         m_child_goals.push(goal);//add new child goal
         m_current_goal=goal;
     }
-    if(isGoalReached())//reaches child goals
+    if(isChildGoalReached())//reaches child goals
     {
         ROS_INFO("Reached child goal.");
         geometry_msgs::PoseStamped last_child_goal;
         last_child_goal.header.frame_id="empty";
-        if(m_trajectory_path.size()!=0)
+        if(!m_trajectory_path.empty())
         {
             m_trajectory_path.clear();
         }
@@ -102,7 +107,7 @@ bool SegmentGlobalPlanner::makePlan(const geometry_msgs::PoseStamped& start, con
 
 void SegmentGlobalPlanner::initialize(std::string name, costmap_2d::Costmap2DROS* costmap_ros)
 {
-    ROS_INFO("Initializing clear_all_costmaps_recovery plugin!");
+    ROS_INFO("Initializing segment_global_planner plugin!");
     ros::NodeHandle private_nh("~/" + name);
     plan_pub_=private_nh.advertise<nav_msgs::Path>("plan", 1);
     m_dynamic_config_server.reset(new dynamic_reconfigure::Server<SegmentGlobalPlannerConfig>(private_nh));//setup dynamic reconfigure
@@ -196,7 +201,7 @@ void SegmentGlobalPlanner::insertPoints()
     return;
 }
 
-bool SegmentGlobalPlanner::isGoalReached()
+bool SegmentGlobalPlanner::isChildGoalReached()
 {
     if(!m_got_first_goal||sq_distance(m_current_pose,m_segment_goal)<=m_goal_threshold*m_goal_threshold)
     {
@@ -223,7 +228,7 @@ bool SegmentGlobalPlanner::clearTrajectoryCB(std_srvs::Empty::Request& request, 
 {
     m_current_goal.pose.position.x=m_current_goal.pose.position.y=0.0;
     m_current_goal.header.frame_id="empty";
-    while(m_child_goals.size()!=0)//clear the queue
+    while(!m_child_goals.empty())//clear the queue
     {
         m_child_goals.pop();
     }
@@ -231,6 +236,27 @@ bool SegmentGlobalPlanner::clearTrajectoryCB(std_srvs::Empty::Request& request, 
     m_got_first_goal=false;//reset the first time mark
     ROS_WARN("Trajectory has been cleared!");
     return true;
+}
+
+void SegmentGlobalPlanner::clickedPointCB(const geometry_msgs::PointStamped::ConstPtr& ptr)
+{
+    geometry_msgs::PoseStamped publish_goal;
+    publish_goal.pose.position=ptr->point;
+    publish_goal.header=ptr->header;
+    if(!m_child_goals.empty())
+    {
+        geometry_msgs::PoseStamped last_child_goal=m_child_goals.back();
+        setAngle(&publish_goal,atan2(publish_goal.pose.position.y-last_child_goal.pose.position.y,publish_goal.pose.position.x-last_child_goal.pose.position.x));//set the orientation of the goal vector from the last goal to this one
+    }
+    else if(m_got_first_goal)//current child goal is the final goal
+    {
+        setAngle(&publish_goal,atan2(publish_goal.pose.position.y-m_current_pose.pose.position.y,publish_goal.pose.position.x-m_current_pose.pose.position.x));//set the orientation of the goal vector from current robot position to the new goal
+    }
+    else
+    {
+        publish_goal.pose.orientation=tf::createQuaternionMsgFromYaw(0.0);//default orientation
+    }
+    m_pose_from_clicked_point_pub.publish(publish_goal);
 }
 
 }//namespace end
