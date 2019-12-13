@@ -1,3 +1,4 @@
+#include <tf/transform_datatypes.h>
 #include <segment_global_planner/segment_global_planner.h>
 #include <pluginlib/class_list_macros.h>
 #include <cmath>
@@ -41,7 +42,7 @@ bool SegmentGlobalPlanner::makePlan(const geometry_msgs::PoseStamped& start, con
         }
         m_trajectory_path.push_back(last_child_goal.header.frame_id!="empty"?last_child_goal:m_current_pose);
         m_trajectory_path.push_back(m_segment_goal);
-        insertPoints();//fill the intervals of long segments
+        insertPoints();//fill the intervals of long segments with poses
     }
     else//doesn't reach child goals
     {
@@ -66,7 +67,7 @@ bool SegmentGlobalPlanner::makePlan(const geometry_msgs::PoseStamped& start, con
             }
             m_trajectory_path.push_back(start);
             m_trajectory_path.push_back(m_segment_goal);
-            insertPoints();//fill the intervals of long segments
+            insertPoints();//fill the intervals of long segments with poses
         }
     }
     m_got_first_goal=true;
@@ -128,7 +129,7 @@ void SegmentGlobalPlanner::trimTrajectory(const geometry_msgs::PoseStamped& star
         p2l=distPointToSegment(start,*itr,*itr_next);
         if(p2p<m_threshold_point_on_line*m_threshold_point_on_line||p2l<m_threshold_point_on_line)//distance is shorter than the threshold
         {
-            p2p=sqrt(p2p);
+            p2p=std::sqrt(p2p);
             if(std::min(p2p,p2l)<min_p2l)//find min distance
             {
                 min_p2l=std::min(p2p,p2l);
@@ -156,13 +157,13 @@ double SegmentGlobalPlanner::distPointToSegment(const geometry_msgs::PoseStamped
         return 999.9;//the point p0 is not between point s1 and point s2
     }
     double HalfC=(p0s1+p0s2+s1s2)/2.0;//half perimeter
-    double s = sqrt(HalfC*(HalfC-s1s2)*(HalfC-p0s1)*(HalfC-p0s2));//Heron's formula
+    double s = std::sqrt(HalfC*(HalfC-s1s2)*(HalfC-p0s1)*(HalfC-p0s2));//Heron's formula
     return 2.0*s/s1s2;//hight
 }
 
 double SegmentGlobalPlanner::distPointToPoint(const geometry_msgs::PoseStamped& p1, const geometry_msgs::PoseStamped& p2)
 {
-    return sqrt(sq_distance(p1,p2));
+    return std::sqrt(sq_distance(p1,p2));
 }
 
 double SegmentGlobalPlanner::sq_distance(const geometry_msgs::PoseStamped& p1, const geometry_msgs::PoseStamped& p2)
@@ -179,14 +180,15 @@ void SegmentGlobalPlanner::insertPoints()
         auto itr_next=++itr;
         itr--;
         double dist_2_point=sq_distance(*itr,*itr_next);
-        if(dist_2_point>(m_point_interval+0.01)*(m_point_interval+0.01))
+        if(dist_2_point>(m_point_interval+0.01)*(m_point_interval+0.01))//need to insert one pose
         {
-            dist_2_point=sqrt(dist_2_point);
+            dist_2_point=std::sqrt(dist_2_point);
             double proportion=m_point_interval/dist_2_point;
             geometry_msgs::PoseStamped point_to_insert;
             point_to_insert.pose.position.x=itr->pose.position.x+(itr_next->pose.position.x-itr->pose.position.x)*proportion;
             point_to_insert.pose.position.y=itr->pose.position.y+(itr_next->pose.position.y-itr->pose.position.y)*proportion;
-            point_to_insert.pose.orientation=itr->pose.orientation;
+            auto itr_last_point=--m_trajectory_path.end();//last point
+            setAngle(&point_to_insert,atan2(itr_last_point->pose.position.y-itr->pose.position.y,itr_last_point->pose.position.x-itr->pose.position.x));
             point_to_insert.header.frame_id=global_frame_;
             m_trajectory_path.insert(itr_next,point_to_insert);
         }
@@ -201,6 +203,11 @@ bool SegmentGlobalPlanner::isGoalReached()
         return true;
     }
     return false;
+}
+
+void SegmentGlobalPlanner::setAngle(geometry_msgs::PoseStamped* pose, double angle)
+{
+    pose->pose.orientation = tf::createQuaternionMsgFromYaw(angle);
 }
 
 void SegmentGlobalPlanner::reconfigureCB(segment_global_planner::SegmentGlobalPlannerConfig& config, uint32_t level)

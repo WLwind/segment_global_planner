@@ -80,6 +80,12 @@ private:
     * @return True if the robot reached the goal, false otherwise
     */
     bool isGoalReached();
+    /*
+    * @brief Set the angle to the pose
+    * @param pose The pose that you want to set the ange for
+    * @param angle The angle by rad
+    */
+    void setAngle(geometry_msgs::PoseStamped* pose, double angle);
     /**
     * @brief Dynamic_reconfigure callback function
     */
