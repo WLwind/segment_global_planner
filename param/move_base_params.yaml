@@ -1,2 +1,2 @@
 #Make sure that this file is launched from move_base node tag.
-base_local_planner: segment_global_planner/SegmentGlobalPlanner
+base_global_planner: segment_global_planner/SegmentGlobalPlanner
