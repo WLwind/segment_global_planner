@@ -1,3 +1,4 @@
 <node pkg="move_base" type="move_base" respawn="false" name="move_base" output="screen">
     <param name="base_global_planner" value="segment_global_planner/SegmentGlobalPlanner"/>
+    <rosparam file="$(find segment_global_planner)/params/segment_global_planner_params.yaml" command="load" />
 </node>

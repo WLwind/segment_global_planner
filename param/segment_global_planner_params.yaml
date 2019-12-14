@@ -1,0 +1,4 @@
+SegmentGlobalPlanner:
+  child_goal_threshold: 0.2
+  point_interval: 0.05
+  threshold_point_on_line: 0.3

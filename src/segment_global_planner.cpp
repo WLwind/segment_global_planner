@@ -114,6 +114,9 @@ void SegmentGlobalPlanner::initialize(std::string name, costmap_2d::Costmap2DROS
     ROS_INFO("Initializing segment_global_planner plugin!");
     ros::NodeHandle private_nh("~/" + name);
     plan_pub_=private_nh.advertise<nav_msgs::Path>("plan", 1);
+    private_nh.param("child_goal_threshold",m_goal_threshold,m_goal_threshold);
+    private_nh.param("point_interval",m_point_interval,m_point_interval);
+    private_nh.param("threshold_point_on_line",m_threshold_point_on_line,m_threshold_point_on_line);
     m_dynamic_config_server.reset(new dynamic_reconfigure::Server<SegmentGlobalPlannerConfig>(private_nh));//setup dynamic reconfigure
     m_dynamic_config_server->setCallback(boost::bind(&SegmentGlobalPlanner::reconfigureCB, this, _1, _2));
     m_clear_trajectory_server=private_nh.advertiseService("clear_trajectory",&SegmentGlobalPlanner::clearTrajectoryCB,this);//setup clear trajectory service
