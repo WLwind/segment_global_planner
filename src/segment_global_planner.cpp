@@ -24,10 +24,14 @@ bool SegmentGlobalPlanner::makePlan(const geometry_msgs::PoseStamped& start, con
             geometry_msgs::PoseStamped* old_last_child_goal=&m_child_goals.back();
             setAngle(old_last_child_goal,atan2(goal.pose.position.y-old_last_child_goal->pose.position.y,goal.pose.position.x-old_last_child_goal->pose.position.x));//set the orientation of the old goal vector from it to the new goal
         }
+        else
+        {
+            setAngle(&m_segment_goal,atan2(goal.pose.position.y-m_segment_goal.pose.position.y,goal.pose.position.x-m_segment_goal.pose.position.x));//set the orientation of the segment goal vector from it to the new goal
+        }
         m_child_goals.push(goal);//add new child goal
         m_current_goal=goal;
     }
-    if(isChildGoalReached())//reaches child goals
+    if(isChildGoalReached())//reaches child goals, need to switch to next segment goal
     {
         ROS_INFO("Reached child goal.");
         geometry_msgs::PoseStamped last_child_goal;
@@ -57,16 +61,16 @@ bool SegmentGlobalPlanner::makePlan(const geometry_msgs::PoseStamped& start, con
         }
         if(m_trajectory_path.size()<2)
         {
-            if(new_goal&&m_trajectory_path.size()==0)//robot is far from unreached segment
+            if(new_goal&&m_trajectory_path.empty())//robot is far from unreached segment, it was trimmed totally
             {
-                while(m_child_goals.size()>1)//clear the queue
+                while(!m_child_goals.empty())//clear the queue
                 {
                     m_child_goals.pop();
                 }
                 m_segment_goal=goal;
             }
             ROS_INFO("New trajectory.");
-            if(m_trajectory_path.size()!=0)
+            if(!m_trajectory_path.empty())
             {
                 m_trajectory_path.clear();
             }
@@ -76,7 +80,7 @@ bool SegmentGlobalPlanner::makePlan(const geometry_msgs::PoseStamped& start, con
         }
     }
     m_got_first_goal=true;
-    if(plan.size()!=0)
+    if(!plan.empty())
     {
         plan.clear();
     }
@@ -250,7 +254,14 @@ void SegmentGlobalPlanner::clickedPointCB(const geometry_msgs::PointStamped::Con
     }
     else if(m_got_first_goal)//current child goal is the final goal
     {
-        setAngle(&publish_goal,atan2(publish_goal.pose.position.y-m_current_pose.pose.position.y,publish_goal.pose.position.x-m_current_pose.pose.position.x));//set the orientation of the goal vector from current robot position to the new goal
+        if(!isChildGoalReached())
+        {
+            setAngle(&publish_goal,atan2(publish_goal.pose.position.y-m_segment_goal.pose.position.y,publish_goal.pose.position.x-m_segment_goal.pose.position.x));//set the orientation of the goal vector from current robot position to the new goal
+        }
+        else
+        {
+            setAngle(&publish_goal,atan2(publish_goal.pose.position.y-m_current_pose.pose.position.y,publish_goal.pose.position.x-m_current_pose.pose.position.x));
+        }
     }
     else
     {
