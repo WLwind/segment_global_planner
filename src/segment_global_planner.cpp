@@ -1,8 +1,9 @@
+#include <cmath>
+#include <algorithm>
 #include <tf/transform_datatypes.h>
 #include <segment_global_planner/segment_global_planner.h>
 #include <pluginlib/class_list_macros.h>
-#include <cmath>
-#include <algorithm>
+#include <costmap_2d/footprint.h>
 
 PLUGINLIB_EXPORT_CLASS(segment_global_planner::SegmentGlobalPlanner, nav_core::BaseGlobalPlanner)//register plugin
 
@@ -51,7 +52,7 @@ bool SegmentGlobalPlanner::makePlan(const geometry_msgs::PoseStamped& start, con
         }
         m_trajectory_path.push_back(last_child_goal.header.frame_id!="empty"?last_child_goal:m_current_pose);
         m_trajectory_path.push_back(m_segment_goal);
-        insertPoints();//fill the intervals of long segments with poses
+        m_feasibility=insertPoints();//fill the intervals of long segments with poses
     }
     else//doesn't reach child goals
     {
@@ -76,7 +77,7 @@ bool SegmentGlobalPlanner::makePlan(const geometry_msgs::PoseStamped& start, con
             }
             m_trajectory_path.push_back(start);
             m_trajectory_path.push_back(m_segment_goal);
-            insertPoints();//fill the intervals of long segments with poses
+            m_feasibility=insertPoints();//fill the intervals of long segments with poses
         }
     }
     m_got_first_goal=true;
@@ -106,7 +107,7 @@ bool SegmentGlobalPlanner::makePlan(const geometry_msgs::PoseStamped& start, con
         gui_path.header.frame_id=global_frame_;
         plan_pub_.publish(gui_path);
     }
-    return true;
+    return m_feasibility;
 }
 
 void SegmentGlobalPlanner::initialize(std::string name, costmap_2d::Costmap2DROS* costmap_ros)
@@ -120,7 +121,10 @@ void SegmentGlobalPlanner::initialize(std::string name, costmap_2d::Costmap2DROS
     m_dynamic_config_server.reset(new dynamic_reconfigure::Server<SegmentGlobalPlannerConfig>(private_nh));//setup dynamic reconfigure
     m_dynamic_config_server->setCallback(boost::bind(&SegmentGlobalPlanner::reconfigureCB, this, _1, _2));
     m_clear_trajectory_server=private_nh.advertiseService("clear_trajectory",&SegmentGlobalPlanner::clearTrajectoryCB,this);//setup clear trajectory service
-    global_frame_ = costmap_ros->getGlobalFrameID();
+    m_costmap_ros=costmap_ros;
+    global_frame_ = m_costmap_ros->getGlobalFrameID();
+    m_costmap_model=std::make_shared<base_local_planner::CostmapModel>(*m_costmap_ros->getCostmap());//make a costmap model
+    costmap_2d::calculateMinAndMaxDistances(m_costmap_ros->getRobotFootprint(),m_robot_inscribed_radius,m_robot_circumscribed_radius);
     return;
 }
 
@@ -185,8 +189,22 @@ double SegmentGlobalPlanner::sq_distance(const geometry_msgs::PoseStamped& p1, c
     return dx*dx +dy*dy;
 }
 
-void SegmentGlobalPlanner::insertPoints()
+bool SegmentGlobalPlanner::insertPoints()
 {
+    unsigned int start_x,start_y,end_x,end_y;
+    if(m_costmap_ros->getCostmap()->worldToMap(m_trajectory_path.begin()->pose.position.x,m_trajectory_path.begin()->pose.position.y,start_x,start_y)&&m_costmap_ros->getCostmap()->worldToMap((--m_trajectory_path.end())->pose.position.x,(--m_trajectory_path.end())->pose.position.y,end_x,end_y))
+    {
+        if(m_costmap_model->lineCost(start_x,end_x,start_y,end_y)<0.0)
+        {
+            ROS_ERROR("Some trajectory points are in lethal obstacle cell.");
+            return false;
+        }
+    }
+    else
+    {
+        ROS_ERROR("Some trajectory points are out of map.");
+        return false;
+    }
     for(auto itr=m_trajectory_path.begin();itr!=--m_trajectory_path.end();itr++)//no need to judge the last pose
     {
         auto itr_next=++itr;
@@ -200,12 +218,13 @@ void SegmentGlobalPlanner::insertPoints()
             point_to_insert.pose.position.x=itr->pose.position.x+(itr_next->pose.position.x-itr->pose.position.x)*proportion;
             point_to_insert.pose.position.y=itr->pose.position.y+(itr_next->pose.position.y-itr->pose.position.y)*proportion;
             auto itr_last_point=--m_trajectory_path.end();//last point
-            setAngle(&point_to_insert,atan2(itr_last_point->pose.position.y-itr->pose.position.y,itr_last_point->pose.position.x-itr->pose.position.x));
+            double insert_point_yaw=atan2(itr_last_point->pose.position.y-itr->pose.position.y,itr_last_point->pose.position.x-itr->pose.position.x);
+            setAngle(&point_to_insert,insert_point_yaw);
             point_to_insert.header.frame_id=global_frame_;
             m_trajectory_path.insert(itr_next,point_to_insert);
         }
     }
-    return;
+    return true;
 }
 
 bool SegmentGlobalPlanner::isChildGoalReached()
@@ -241,6 +260,9 @@ bool SegmentGlobalPlanner::clearTrajectoryCB(std_srvs::Empty::Request& request, 
     }
     m_trajectory_path.clear();//clear trajectory
     m_got_first_goal=false;//reset the first time mark
+    nav_msgs::Path gui_path;
+    gui_path.header.frame_id=global_frame_;
+    plan_pub_.publish(gui_path);//publish an empty path
     ROS_WARN("Trajectory has been cleared!");
     return true;
 }
@@ -271,6 +293,25 @@ void SegmentGlobalPlanner::clickedPointCB(const geometry_msgs::PointStamped::Con
         publish_goal.pose.orientation=tf::createQuaternionMsgFromYaw(0.0);//default orientation
     }
     m_pose_from_clicked_point_pub.publish(publish_goal);
+}
+
+bool SegmentGlobalPlanner::feasibilityChecking()
+{
+    double feasibility_result;
+    tf::Quaternion tfq;
+    for(auto& each_pose:m_trajectory_path)
+    {
+        double roll,pitch,yaw;
+        tf::quaternionMsgToTF(each_pose.pose.orientation,tfq);
+        tf::Matrix3x3(tfq).getRPY(roll, pitch, yaw);
+        feasibility_result=m_costmap_model->footprintCost(each_pose.pose.position.x,each_pose.pose.position.y,yaw,m_costmap_ros->getRobotFootprint(),m_robot_inscribed_radius,m_robot_circumscribed_radius);
+        if(feasibility_result<0)
+        {
+            ROS_ERROR("Current segment trajectory is not feasible! error code: %f",feasibility_result);
+            return false;
+        }
+    }
+    return true;
 }
 
 }//namespace end

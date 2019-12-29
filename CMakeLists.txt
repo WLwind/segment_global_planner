@@ -9,6 +9,8 @@ add_compile_options(-std=c++11)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
   nav_core
+  costmap_2d
+  base_local_planner
   pluginlib
   roscpp
   geometry_msgs
@@ -24,9 +26,18 @@ generate_dynamic_reconfigure_options(
 )
 
 catkin_package(
-#  INCLUDE_DIRS include
-#  LIBRARIES segment_global_planner
-#  CATKIN_DEPENDS nav_core pluginlib roscpp
+  INCLUDE_DIRS include
+  LIBRARIES segment_global_planner
+  CATKIN_DEPENDS
+    nav_core
+    costmap_2d
+    base_local_planner
+    pluginlib
+    roscpp
+    geometry_msgs
+    nav_msgs
+    tf
+    dynamic_reconfigur
 #  DEPENDS system_lib
 )
 

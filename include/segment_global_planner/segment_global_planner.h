@@ -1,15 +1,16 @@
 #pragma once
 
-#include <ros/ros.h>
-#include <nav_core/base_global_planner.h>
-#include <dynamic_reconfigure/server.h>
-#include <nav_msgs/Path.h>
 #include <vector>
 #include <list>
 #include <string>
 #include <queue>
-#include <segment_global_planner/SegmentGlobalPlannerConfig.h>
+#include <ros/ros.h>
+#include <dynamic_reconfigure/server.h>
+#include <nav_msgs/Path.h>
 #include <std_srvs/Empty.h>
+#include <nav_core/base_global_planner.h>
+#include <base_local_planner/costmap_model.h>
+#include <segment_global_planner/SegmentGlobalPlannerConfig.h>
 
 namespace segment_global_planner
 {
@@ -40,7 +41,7 @@ public:
     /**
     * @brief Destructor
     */
-    virtual ~SegmentGlobalPlanner(){}
+    virtual ~SegmentGlobalPlanner(){m_costmap_ros=nullptr;}
 
 private:
     /**
@@ -71,9 +72,10 @@ private:
     */
     double distPointToPoint(const geometry_msgs::PoseStamped& p1, const geometry_msgs::PoseStamped& p2);
     /**
-    * @brief Insert points on the segment
+    * @brief Insert points on current long segment
+    * @return True if current segment trajectory is feasible, false otherwise
     */
-    void insertPoints();
+    bool insertPoints();
     /**
     * @brief Judge whether the robot reached the segment goal or not
     * @return True if the robot reached the goal, false otherwise
@@ -97,15 +99,24 @@ private:
     * @brief clicked_point topic subscriber callback function
     */
     void clickedPointCB(const geometry_msgs::PointStamped::ConstPtr& ptr);
+    /**
+    * @brief check if current trajectory is feasible
+    * @return True if current segment trajectory is feasible, false otherwise
+    */
+    bool feasibilityChecking();
     
     double m_threshold_point_on_line{0.3};//to determine whether a point is on the line
     double m_point_interval{0.05};//distance between two points on a segment
     double m_goal_threshold{0.2};//goal threshold
     bool m_got_first_goal{false};//whether the planner received the first goal
+    double m_robot_inscribed_radius{0.1},m_robot_circumscribed_radius{0.1};//stores inscribed and circumscribed radius of the robot footprint
+    bool m_feasibility{true};//feasibility of the global plan
     std::list<geometry_msgs::PoseStamped> m_trajectory_path;//stores current segment trajectory
     std::string global_frame_{"map"};//global frame id
     ros::Publisher plan_pub_;//GUI publisher
     geometry_msgs::PoseStamped m_current_pose,m_current_goal,m_segment_goal;//current robot pose, current global planner goal (final goal) and current child goal (goal of a segment that is heading to)
+    costmap_2d::Costmap2DROS* m_costmap_ros;//points to the costmap2dros
+    std::shared_ptr<base_local_planner::CostmapModel> m_costmap_model;//costmap model for feasibility checking
     std::queue<geometry_msgs::PoseStamped> m_child_goals;//stores all child goals
     std::unique_ptr<dynamic_reconfigure::Server<SegmentGlobalPlannerConfig>> m_dynamic_config_server;//server pointer for dynamic reconfigure
     ros::ServiceServer m_clear_trajectory_server;//service for clearing trajectory

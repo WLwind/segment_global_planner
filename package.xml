@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package format="2">
   <name>segment_global_planner</name>
-  <version>2.2.0</version>
+  <version>2.2.1</version>
   <description>A ROS global planner plugin for segments tracking.</description>
 
   <!-- One maintainer tag required, multiple allowed, one person per tag -->
@@ -52,15 +52,20 @@
   <build_depend>nav_core</build_depend>
   <build_depend>pluginlib</build_depend>
   <build_depend>roscpp</build_depend>
+  <build_depend>dynamic_reconfigur</build_depend>
   <build_export_depend>nav_core</build_export_depend>
   <build_export_depend>pluginlib</build_export_depend>
   <build_export_depend>roscpp</build_export_depend>
+  <build_export_depend>dynamic_reconfigur</build_export_depend>
   <exec_depend>nav_core</exec_depend>
   <exec_depend>pluginlib</exec_depend>
   <exec_depend>roscpp</exec_depend>
+  <exec_depend>dynamic_reconfigur</exec_depend>
   <depend>geometry_msgs</depend>
   <depend>nav_msgs</depend>
-  <depend>dynamic_reconfigure</depend>
+  <depend>costmap_2d</depend>
+  <depend>base_local_planner</depend>
+  <depend>tf</depend>
 
   <!-- The export tag contains other, unspecified, tags -->
   <export>
