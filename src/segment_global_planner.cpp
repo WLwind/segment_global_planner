@@ -130,7 +130,7 @@ void SegmentGlobalPlanner::initialize(std::string name, costmap_2d::Costmap2DROS
 
 void SegmentGlobalPlanner::trimTrajectory(const geometry_msgs::PoseStamped& start)
 {
-    double p2p,p2l,min_p2l=9999.9;
+    double p2l,min_p2l=9999.9;
     for(auto itr=m_trajectory_path.begin();itr!=m_trajectory_path.end();itr++)//segments are one less than poses 
     {
         if(itr==--m_trajectory_path.end())//the start point is far from all segments
@@ -139,24 +139,19 @@ void SegmentGlobalPlanner::trimTrajectory(const geometry_msgs::PoseStamped& star
             m_trajectory_path.clear();
             break;
         }
-        p2p=sq_distance(start,*itr);
         auto itr_next=++itr;
         itr--;
         p2l=distPointToSegment(start,*itr,*itr_next);
-        if(p2p<m_threshold_point_on_line*m_threshold_point_on_line||p2l<m_threshold_point_on_line)//distance is shorter than the threshold
+        if(p2l<m_threshold_point_on_line&&p2l<min_p2l)//find min distance
         {
-            p2p=std::sqrt(p2p);
-            if(std::min(p2p,p2l)<min_p2l)//find min distance
-            {
-                min_p2l=std::min(p2p,p2l);
-            }
-            else//when distance becomes larger
-            {
-                ROS_INFO("Update trajectory.");
-                m_trajectory_path.erase(m_trajectory_path.begin(),--itr);//erase the points behind the robot [begin,i-1)
-                itr++;
-                break;
-            }
+            min_p2l=p2l;
+        }
+        else if(min_p2l<m_threshold_point_on_line&&p2l>=min_p2l)//when distance becomes larger
+        {
+            ROS_INFO("Update trajectory.");
+            m_trajectory_path.erase(m_trajectory_path.begin(),--itr);//erase the points behind the robot [begin,i-1)
+            itr++;
+            break;
         }
     }
     return;
@@ -164,17 +159,17 @@ void SegmentGlobalPlanner::trimTrajectory(const geometry_msgs::PoseStamped& star
 
 double SegmentGlobalPlanner::distPointToSegment(const geometry_msgs::PoseStamped& p0,const geometry_msgs::PoseStamped& s1, const geometry_msgs::PoseStamped& s2)
 {
-    double p0s1,p0s2,s1s2;
-    p0s1=distPointToPoint(p0,s1);
-    p0s2=distPointToPoint(p0,s2);
-    s1s2=distPointToPoint(s1,s2);
-    if(p0s2*p0s2-p0s1*p0s1-s1s2*s1s2>0||p0s1*p0s1-p0s2*p0s2-s1s2*s1s2>0)//The Law of Cosines
+    double p0s1[2]{s1.pose.position.x-p0.pose.position.x,s1.pose.position.y-p0.pose.position.y};//vectors
+    double p0s2[2]{s2.pose.position.x-p0.pose.position.x,s2.pose.position.y-p0.pose.position.y};
+    double s1s2[2]{s2.pose.position.x-s1.pose.position.x,s2.pose.position.y-s1.pose.position.y};
+    if(s1s2[0]*p0s1[0]+s1s2[1]*p0s1[1]>0||s1s2[0]*p0s2[0]+s1s2[1]*p0s2[1]<0)//dot product, obtuse angle
     {
         return 999.9;//the point p0 is not between point s1 and point s2
     }
-    double HalfC=(p0s1+p0s2+s1s2)/2.0;//half perimeter
-    double s = std::sqrt(HalfC*(HalfC-s1s2)*(HalfC-p0s1)*(HalfC-p0s2));//Heron's formula
-    return 2.0*s/s1s2;//hight
+    double A=s1.pose.position.y-s2.pose.position.y;//parameters of linear equation : Ax+By+C=0
+    double B=s2.pose.position.x-s1.pose.position.x;
+    double C=s1.pose.position.x*s2.pose.position.y-s1.pose.position.y*s2.pose.position.x;
+    return (A*p0.pose.position.x+B*p0.pose.position.y+C)/std::sqrt(A*A+B*B);//distance form p0 to line s1s2 : |Ax+By+C|/√(A²+B²)
 }
 
 double SegmentGlobalPlanner::distPointToPoint(const geometry_msgs::PoseStamped& p1, const geometry_msgs::PoseStamped& p2)
