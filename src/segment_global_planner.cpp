@@ -1,6 +1,6 @@
 #include <cmath>
 #include <algorithm>
-#include <tf/transform_datatypes.h>
+#include <tf2/utils.h>
 #include <segment_global_planner/segment_global_planner.h>
 #include <pluginlib/class_list_macros.h>
 #include <costmap_2d/footprint.h>
@@ -124,7 +124,6 @@ void SegmentGlobalPlanner::initialize(std::string name, costmap_2d::Costmap2DROS
     m_costmap_ros=costmap_ros;
     global_frame_ = m_costmap_ros->getGlobalFrameID();
     m_costmap_model=std::make_shared<base_local_planner::CostmapModel>(*m_costmap_ros->getCostmap());//make a costmap model
-    costmap_2d::calculateMinAndMaxDistances(m_costmap_ros->getRobotFootprint(),m_robot_inscribed_radius,m_robot_circumscribed_radius);
     return;
 }
 
@@ -233,7 +232,9 @@ bool SegmentGlobalPlanner::isChildGoalReached()
 
 void SegmentGlobalPlanner::setAngle(geometry_msgs::PoseStamped* pose, double angle)
 {
-    pose->pose.orientation = tf::createQuaternionMsgFromYaw(angle);
+    tf2::Quaternion tf2q;
+    tf2q.setRPY(0.0,0.0,angle);
+    pose->pose.orientation = tf2::toMsg(tf2q);
 }
 
 void SegmentGlobalPlanner::reconfigureCB(segment_global_planner::SegmentGlobalPlannerConfig& config, uint32_t level)
@@ -285,7 +286,7 @@ void SegmentGlobalPlanner::clickedPointCB(const geometry_msgs::PointStamped::Con
     }
     else
     {
-        publish_goal.pose.orientation=tf::createQuaternionMsgFromYaw(0.0);//default orientation
+        publish_goal.pose.orientation.z=1;//default orientation
     }
     m_pose_from_clicked_point_pub.publish(publish_goal);
 }
@@ -293,13 +294,12 @@ void SegmentGlobalPlanner::clickedPointCB(const geometry_msgs::PointStamped::Con
 bool SegmentGlobalPlanner::feasibilityChecking()
 {
     double feasibility_result;
-    tf::Quaternion tfq;
+    tf2::Quaternion tf2q;
     for(auto& each_pose:m_trajectory_path)
     {
-        double roll,pitch,yaw;
-        tf::quaternionMsgToTF(each_pose.pose.orientation,tfq);
-        tf::Matrix3x3(tfq).getRPY(roll, pitch, yaw);
-        feasibility_result=m_costmap_model->footprintCost(each_pose.pose.position.x,each_pose.pose.position.y,yaw,m_costmap_ros->getRobotFootprint(),m_robot_inscribed_radius,m_robot_circumscribed_radius);
+        tf2::fromMsg(each_pose.pose.orientation,tf2q);
+        double yaw=tf2::getYaw(tf2q);
+        feasibility_result=m_costmap_model->footprintCost(each_pose.pose.position.x,each_pose.pose.position.y,yaw,m_costmap_ros->getRobotFootprint(),0.0,0.0);
         if(feasibility_result<0)
         {
             ROS_ERROR("Current segment trajectory is not feasible! error code: %f",feasibility_result);

@@ -8,6 +8,7 @@
 #include <dynamic_reconfigure/server.h>
 #include <nav_msgs/Path.h>
 #include <std_srvs/Empty.h>
+#include <geometry_msgs/PointStamped.h>
 #include <nav_core/base_global_planner.h>
 #include <base_local_planner/costmap_model.h>
 #include <segment_global_planner/SegmentGlobalPlannerConfig.h>
@@ -109,7 +110,6 @@ private:
     double m_point_interval{0.05};//distance between two points on a segment
     double m_goal_threshold{0.2};//goal threshold
     bool m_got_first_goal{false};//whether the planner received the first goal
-    double m_robot_inscribed_radius{0.1},m_robot_circumscribed_radius{0.1};//stores inscribed and circumscribed radius of the robot footprint
     bool m_feasibility{true};//feasibility of the global plan
     std::list<geometry_msgs::PoseStamped> m_trajectory_path;//stores current segment trajectory
     std::string global_frame_{"map"};//global frame id

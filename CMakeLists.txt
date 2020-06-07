@@ -15,7 +15,7 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   geometry_msgs
   nav_msgs
-  tf
+  tf2
   dynamic_reconfigure
 )
 
@@ -36,7 +36,7 @@ catkin_package(
     roscpp
     geometry_msgs
     nav_msgs
-    tf
+    tf2
     dynamic_reconfigur
 #  DEPENDS system_lib
 )
