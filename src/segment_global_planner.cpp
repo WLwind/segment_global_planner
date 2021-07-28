@@ -273,20 +273,16 @@ void SegmentGlobalPlanner::clickedPointCB(const geometry_msgs::PointStamped::Con
         geometry_msgs::PoseStamped last_child_goal=m_child_goals.back();
         setAngle(&publish_goal,atan2(publish_goal.pose.position.y-last_child_goal.pose.position.y,publish_goal.pose.position.x-last_child_goal.pose.position.x));//set the orientation of the goal vector from the last goal to this one
     }
-    else if(m_got_first_goal)//current child goal is the final goal
+    else if (!isChildGoalReached()) //current child goal is the final goal
     {
-        if(!isChildGoalReached())
-        {
-            setAngle(&publish_goal,atan2(publish_goal.pose.position.y-m_segment_goal.pose.position.y,publish_goal.pose.position.x-m_segment_goal.pose.position.x));//set the orientation of the goal vector from current robot position to the new goal
-        }
-        else
-        {
-            setAngle(&publish_goal,atan2(publish_goal.pose.position.y-m_current_pose.pose.position.y,publish_goal.pose.position.x-m_current_pose.pose.position.x));
-        }
+        setAngle(&publish_goal, std::atan2(publish_goal.pose.position.y - m_segment_goal.pose.position.y,
+                                           publish_goal.pose.position.x - m_segment_goal.pose.position.x)); //set the orientation of the goal vector from current robot position to the new goal
     }
     else
     {
-        publish_goal.pose.orientation.z=1;//default orientation
+        geometry_msgs::TransformStamped tf_map_to_base = tf_buffer_.lookupTransform("map", "base_link", ros::Time(0));
+        setAngle(&publish_goal, std::atan2(publish_goal.pose.position.y - tf_map_to_base.transform.translation.y,
+                                           publish_goal.pose.position.x - tf_map_to_base.transform.translation.x)); //robot position to new goal
     }
     m_pose_from_clicked_point_pub.publish(publish_goal);
 }

@@ -11,6 +11,7 @@
 #include <geometry_msgs/PointStamped.h>
 #include <nav_core/base_global_planner.h>
 #include <base_local_planner/costmap_model.h>
+#include <tf2_ros/transform_listener.h>
 #include <segment_global_planner/SegmentGlobalPlannerConfig.h>
 
 namespace segment_global_planner
@@ -122,6 +123,8 @@ private:
     ros::ServiceServer m_clear_trajectory_server;//service for clearing trajectory
     ros::Publisher m_pose_from_clicked_point_pub{ros::NodeHandle().advertise<geometry_msgs::PoseStamped>("/move_base_simple/goal",10)};//publish the goal pose when the clicked_point has been received
     ros::Subscriber m_clicked_point_sub{ros::NodeHandle().subscribe<geometry_msgs::PointStamped>("/clicked_point",10,&SegmentGlobalPlanner::clickedPointCB,this)};//rviz clicked_point subscriber
+    tf2_ros::Buffer tf_buffer_ { ros::Duration(1.0) };
+    tf2_ros::TransformListener tf_ { tf_buffer_ };
 };
 
 }//end namespace
