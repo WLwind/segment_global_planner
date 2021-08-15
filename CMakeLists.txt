@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.8.3)
 project(segment_global_planner)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
-add_compile_options(-std=c++11)
+add_compile_options(-std=c++17)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
@@ -42,13 +42,13 @@ catkin_package(
 )
 
 include_directories(
-  include ${catkin_INCLUDE_DIRS}
-# include
+  include
   ${catkin_INCLUDE_DIRS}
 )
 
 add_library(segment_global_planner
   src/segment_global_planner.cpp
+  src/line_segment.cpp
 )
 add_dependencies(segment_global_planner ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencfg)
 target_link_libraries(segment_global_planner

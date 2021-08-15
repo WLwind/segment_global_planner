@@ -16,9 +16,9 @@
 
 namespace segment_global_planner
 {
-    /**
-    * This class is an implementation of nav_core::BaseGlobalPlanner from standard ROS navigation package. It can help users to directly set line segments using RViz and let the robot follow the segments sequentially.
-    */
+/**
+* This class is an implementation of nav_core::BaseGlobalPlanner from standard ROS navigation package. It can help users to directly set line segments using RViz and let the robot follow the segments sequentially.
+*/
 class SegmentGlobalPlanner:public nav_core::BaseGlobalPlanner
 {
 public:
@@ -26,6 +26,10 @@ public:
     * @brief Constructor
     */
     SegmentGlobalPlanner();
+    /**
+    * @brief Destructor
+    */
+    ~SegmentGlobalPlanner();
     /**
     * @brief Override nav_core::BaseGlobalPlanner::makePlan()
     * @param start The start pose 
@@ -40,55 +44,13 @@ public:
     * @param costmap_ros A pointer to the ROS wrapper of the costmap to use for planning
     */
     void initialize(std::string name, costmap_2d::Costmap2DROS* costmap_ros) override;
-    /**
-    * @brief Destructor
-    */
-    virtual ~SegmentGlobalPlanner(){m_costmap_ros=nullptr;}
 
 private:
-    /**
-    * @brief Trim the points that are behind the robot
-    * @param start Start pose of the trajectory
-    */
-    void trimTrajectory(const geometry_msgs::PoseStamped& start);
-    /**
-    * @brief Get squared the distance between p1 and p2
-    * @param p1 p1 pose
-    * @param p2 p2 pose
-    * @return Squared distance
-    */
-    double sq_distance(const geometry_msgs::PoseStamped& p1, const geometry_msgs::PoseStamped& p2);
-    /**
-    * @brief Calculate diatance from a point(p0) to a line segment(s1 s2)
-    * @param p0 p0 pose
-    * @param s1 s1 pose
-    * @param s2 s2 pose
-    * @return Distance
-    */
-    double distPointToSegment(const geometry_msgs::PoseStamped& p0,const geometry_msgs::PoseStamped& s1, const geometry_msgs::PoseStamped& s2);
-    /**
-    * @brief Calculate diatance from a point to a point
-    * @param p1 p1 pose
-    * @param p2 p2 pose
-    * @return Distance
-    */
-    double distPointToPoint(const geometry_msgs::PoseStamped& p1, const geometry_msgs::PoseStamped& p2);
-    /**
-    * @brief Insert points on current long segment
-    * @return True if current segment trajectory is feasible, false otherwise
-    */
-    bool insertPoints();
     /**
     * @brief Judge whether the robot reached the segment goal or not
     * @return True if the robot reached the goal, false otherwise
     */
     bool isChildGoalReached();
-    /*
-    * @brief Set the angle to the pose
-    * @param pose The pose that you want to set the ange for
-    * @param angle The angle by rad
-    */
-    void setAngle(geometry_msgs::PoseStamped* pose, double angle);
     /**
     * @brief Dynamic_reconfigure callback function
     */
@@ -102,29 +64,39 @@ private:
     */
     void clickedPointCB(const geometry_msgs::PointStamped::ConstPtr& ptr);
     /**
-    * @brief check if current trajectory is feasible
-    * @return True if current segment trajectory is feasible, false otherwise
-    */
-    bool feasibilityChecking();
+     * @brief Add a new segment to the segment_list_
+     * @param new_plan New segment
+     */
+    void addNewSegment(const std::vector<geometry_msgs::PoseStamped>& new_plan);
+    /**
+     * @brief Switch to next segment
+     */
+    void switchSegment();
+    /**
+     * @brief Find distance from a point to a segment less than threshold_point_on_line_
+     * @param point The distance from
+     * @param segment The distance to
+     * @return True if find a less distance
+     */
+    bool findDistLessThresh(const geometry_msgs::PoseStamped& point, const std::vector<geometry_msgs::PoseStamped>& segment);
     
-    double m_threshold_point_on_line{0.3};//to determine whether a point is on the line
-    double m_point_interval{0.05};//distance between two points on a segment
-    double m_goal_threshold{0.2};//goal threshold
-    bool m_got_first_goal{false};//whether the planner received the first goal
-    bool m_feasibility{true};//feasibility of the global plan
-    std::list<geometry_msgs::PoseStamped> m_trajectory_path;//stores current segment trajectory
-    std::string global_frame_{"map"};//global frame id
-    ros::Publisher plan_pub_;//GUI publisher
-    geometry_msgs::PoseStamped m_current_pose,m_current_goal,m_segment_goal;//current robot pose, current global planner goal (final goal) and current child goal (goal of a segment that is heading to)
-    costmap_2d::Costmap2DROS* m_costmap_ros;//points to the costmap2dros
-    std::shared_ptr<base_local_planner::CostmapModel> m_costmap_model;//costmap model for feasibility checking
-    std::queue<geometry_msgs::PoseStamped> m_child_goals;//stores all child goals
-    std::unique_ptr<dynamic_reconfigure::Server<SegmentGlobalPlannerConfig>> m_dynamic_config_server;//server pointer for dynamic reconfigure
-    ros::ServiceServer m_clear_trajectory_server;//service for clearing trajectory
-    ros::Publisher m_pose_from_clicked_point_pub{ros::NodeHandle().advertise<geometry_msgs::PoseStamped>("/move_base_simple/goal",10)};//publish the goal pose when the clicked_point has been received
-    ros::Subscriber m_clicked_point_sub{ros::NodeHandle().subscribe<geometry_msgs::PointStamped>("/clicked_point",10,&SegmentGlobalPlanner::clickedPointCB,this)};//rviz clicked_point subscriber
-    tf2_ros::Buffer tf_buffer_ { ros::Duration(1.0) };
+    double threshold_point_on_line_ { 0.1 }; //to determine whether a point is on the line
+    double point_interval_ { 0.05 }; //distance between two points on a segment
+    double goal_threshold_ { 0.2 }; //goal threshold
+    std::string global_frame_ { "map" }; //global frame id
+    ros::Publisher plan_pub_; //display path publisher
+    geometry_msgs::PoseStamped final_goal_, segment_goal_; //current global planner goal (final goal) and current child goal (goal of a segment that is heading to)
+    std::unique_ptr<dynamic_reconfigure::Server<SegmentGlobalPlannerConfig>> dynamic_config_server_; //server pointer for dynamic reconfigure
+    ros::ServiceServer clear_trajectory_server_; //service for clearing trajectory
+    ros::Publisher pose_from_clicked_point_pub_ { ros::NodeHandle().advertise<geometry_msgs::PoseStamped>("/move_base_simple/goal", 10) }; //publish the goal pose when the clicked_point has been received
+    ros::Subscriber clicked_point_sub_ { ros::NodeHandle().subscribe<geometry_msgs::PointStamped>("/clicked_point", 10, &SegmentGlobalPlanner::clickedPointCB, this) }; //rviz clicked_point subscriber
+    tf2_ros::Buffer tf_buffer_ { ros::Duration(5.0) };
     tf2_ros::TransformListener tf_ { tf_buffer_ };
+    std::list<std::vector<geometry_msgs::PoseStamped>> segment_list_; //stores segments going to be tracked
+    pluginlib::ClassLoader<nav_core::BaseGlobalPlanner> bgp_loader_ { "nav_core", "nav_core::BaseGlobalPlanner" };
+    boost::shared_ptr<nav_core::BaseGlobalPlanner> planner_implementation_; //real global planner for each segment
+    bool final_goal_reached_ { true }; //whether final goal is reached
+    bool got_first_goal { false }; //first goal mark
+    std::vector<geometry_msgs::PoseStamped> last_segment_; //for reaching final goal, when segment_list_ is empty
 };
-
-}//end namespace
+}
