@@ -22,17 +22,17 @@ namespace
 */
 double distPointToSegment(const geometry_msgs::PoseStamped& p0,const geometry_msgs::PoseStamped& s1, const geometry_msgs::PoseStamped& s2)
 {
-    double p0s1[2] { s1.pose.position.x - p0.pose.position.x, s1.pose.position.y - p0.pose.position.y };//vectors
+    double p0s1[2] { s1.pose.position.x - p0.pose.position.x, s1.pose.position.y - p0.pose.position.y }; //vectors
     double p0s2[2] { s2.pose.position.x - p0.pose.position.x, s2.pose.position.y - p0.pose.position.y };
     double s1s2[2] { s2.pose.position.x - s1.pose.position.x, s2.pose.position.y - s1.pose.position.y };
-    if (s1s2[0] * p0s1[0] + s1s2[1] * p0s1[1] > 0 || s1s2[0] * p0s2[0] + s1s2[1] * p0s2[1] < 0)//dot product, obtuse angle
+    if (s1s2[0] * p0s1[0] + s1s2[1] * p0s1[1] > 0 || s1s2[0] * p0s2[0] + s1s2[1] * p0s2[1] < 0) //dot product, obtuse angle
     {
-        return 1.0 / 0.0;//the point p0 is not between point s1 and point s2
+        return 1.0 / 0.0; //the point p0 is not between point s1 and point s2
     }
-    double A = s1.pose.position.y - s2.pose.position.y;//parameters of linear equation : Ax+By+C=0
+    double A = s1.pose.position.y - s2.pose.position.y; //parameters of linear equation : Ax+By+C=0
     double B = s2.pose.position.x - s1.pose.position.x;
     double C = s1.pose.position.x * s2.pose.position.y - s1.pose.position.y * s2.pose.position.x;
-    return (A * p0.pose.position.x + B * p0.pose.position.y + C) / std::sqrt(A * A + B * B);//distance form p0 to line s1s2 : |Ax+By+C|/√(A²+B²)
+    return std::abs(A * p0.pose.position.x + B * p0.pose.position.y + C) / std::sqrt(A * A + B * B); //distance form p0 to line s1s2 : |Ax+By+C|/√(A²+B²)
 }
 }
 
@@ -65,7 +65,7 @@ bool SegmentGlobalPlanner::makePlan(const geometry_msgs::PoseStamped& start, con
         bool new_plan_result(false);
         new_plan_result = planner_implementation_->makePlan(final_goal_, goal, new_plan); //make a plan
 
-        if(new_plan_result) //add a segment
+        if (new_plan_result) //add a segment
         {
             addNewSegment(new_plan);
         }
@@ -123,9 +123,10 @@ void SegmentGlobalPlanner::initialize(std::string name, costmap_2d::Costmap2DROS
     private_nh.param("child_goal_threshold", goal_threshold_, goal_threshold_);
     private_nh.param("point_interval", point_interval_, point_interval_);
     private_nh.param("threshold_point_on_line", threshold_point_on_line_, threshold_point_on_line_);
-    dynamic_config_server_.reset(new dynamic_reconfigure::Server<SegmentGlobalPlannerConfig>(private_nh));//setup dynamic reconfigure
+    dynamic_config_server_.reset(new dynamic_reconfigure::Server<SegmentGlobalPlannerConfig>(private_nh)); //setup dynamic reconfigure
     dynamic_config_server_->setCallback(boost::bind(&SegmentGlobalPlanner::reconfigureCB, this, _1, _2));
-    clear_trajectory_server_=private_nh.advertiseService("clear_trajectory", &SegmentGlobalPlanner::clearTrajectoryCB, this);//setup clear trajectory service
+    clear_trajectory_server_=private_nh.advertiseService("clear_trajectory",
+                                                         &SegmentGlobalPlanner::clearTrajectoryCB, this); //setup clear trajectory service
     global_frame_ = costmap_ros->getGlobalFrameID();
     return;
 }
@@ -187,7 +188,7 @@ void SegmentGlobalPlanner::clickedPointCB(const geometry_msgs::PointStamped::Con
     if (!final_goal_reached_)
     {
         setYaw(&publish_goal, atan2(publish_goal.pose.position.y - final_goal_.pose.position.y,
-                                    publish_goal.pose.position.x - final_goal_.pose.position.x));//set the orientation of the goal vector from the final goal to this one
+                                    publish_goal.pose.position.x - final_goal_.pose.position.x)); //set the orientation of the goal vector from the final goal to this one
     }
     else
     {
