@@ -208,9 +208,20 @@ void SegmentGlobalPlanner::clickedPointCB(const geometry_msgs::PointStamped::Con
 
 void SegmentGlobalPlanner::addNewSegment(const std::vector<geometry_msgs::PoseStamped>& new_plan)
 {
-    if (!segment_list_.empty()) //change the orientation of the last segment
+    if (!segment_list_.empty()) //change the orientation of the last pose of the last segment
     {
-        segment_list_.back().back().pose.orientation = new_plan.front().pose.orientation;
+        int point_number_to_estimate_orientation = std::min<int>(5, new_plan.size());
+        if (point_number_to_estimate_orientation >= 2) //estimate the orientation with the first several points of new_plan
+        {
+            double estimated_yaw = std::atan2(new_plan[point_number_to_estimate_orientation - 1].pose.position.y - new_plan.front().pose.position.y,
+                                              new_plan[point_number_to_estimate_orientation - 1].pose.position.x - new_plan.front().pose.position.x);
+            tf2::Quaternion tf2q(tf2::Vector3(0.0, 0.0, 1.0), estimated_yaw);
+            segment_list_.back().back().pose.orientation = tf2::toMsg(tf2q);
+        }
+        else //set the orientation with first pose orientation of new_plan
+        {
+            segment_list_.back().back().pose.orientation = new_plan.front().pose.orientation;
+        }
     }
     else
     {
