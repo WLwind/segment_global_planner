@@ -9,8 +9,6 @@
 
 PLUGINLIB_EXPORT_CLASS(segment_global_planner::SegmentGlobalPlanner, nav_core::BaseGlobalPlanner)//register plugin
 
-namespace segment_global_planner
-{
 namespace
 {
 /**
@@ -36,7 +34,9 @@ double distPointToSegment(const geometry_msgs::PoseStamped& p0,const geometry_ms
 }
 }
 
-SegmentGlobalPlanner::SegmentGlobalPlanner():nav_core::BaseGlobalPlanner()
+namespace segment_global_planner
+{
+SegmentGlobalPlanner::SegmentGlobalPlanner() : nav_core::BaseGlobalPlanner()
 {
     ROS_INFO("Constructing segment_global_planner plugin!");
 }
@@ -53,38 +53,61 @@ bool SegmentGlobalPlanner::makePlan(const geometry_msgs::PoseStamped& start, con
     {
         switchSegment();
     }
+    bool new_plan = false;
     if (!got_first_goal || final_goal_.pose.position.x != goal.pose.position.x
-                            || final_goal_.pose.position.y != goal.pose.position.y) //whether the goal is a new one
+                        || final_goal_.pose.position.y != goal.pose.position.y) //whether the goal is a new one
     {
+        new_plan = true;
         if (final_goal_reached_ || !findDistLessThresh(start, segment_list_.front())) //need to start a new navigation
         {
             segment_list_.clear();
             final_goal_ = segment_goal_ = start;
         }
         std::vector<geometry_msgs::PoseStamped> new_plan;
-        bool new_plan_result(false);
-        new_plan_result = planner_implementation_->makePlan(final_goal_, goal, new_plan); //make a plan
-
-        if (new_plan_result) //add a segment
+        if (planner_implementation_->makePlan(final_goal_, goal, new_plan) && !new_plan.empty()) //make a plan
         {
-            addNewSegment(new_plan);
+            addNewSegment(new_plan); //add a segment
         }
-        else //fail to get a new plan
+        else //fail to make a new plan
         {
             return false;
         }
-
-        nav_msgs::Path display_path; //display path
-        display_path.header.frame_id = global_frame_;
-        for (auto& segment : segment_list_)
-        {
-            std::copy(segment.begin(), segment.end(), std::back_inserter(display_path.poses));
-        }
-        plan_pub_.publish(display_path);
     }
-    if (!segment_list_.empty())
+
+    if (!segment_list_.empty()) //fill the plan reference
     {
-        plan = segment_list_.front(); //current segment as the plan
+        bool replan_segment = false;
+        if (!replan_)
+        {
+            plan = segment_list_.front(); //current segment as the plan
+        }
+        else //request replanning
+        {
+            if (segment_list_.size() == 1 && new_plan) //no need to replan
+            {
+                plan = segment_list_.front();
+            }
+            else
+            {
+                std::vector<geometry_msgs::PoseStamped> replan_path;
+                if (planner_implementation_->makePlan(start, segment_goal_, replan_path) && !replan_path.empty()) //replan
+                {
+                    plan = segment_list_.front() = replan_path; //replace first segment
+                    replan_segment = true;
+                    ROS_INFO("Current segment has been replaned.");
+                }
+                else //fail to replan
+                {
+                    return false;
+                }
+            }
+            replan_ = false;
+        }
+
+        if (new_plan || replan_segment) //display path
+        {
+           displayPath();
+        }
     }
     else
     {
@@ -125,8 +148,9 @@ void SegmentGlobalPlanner::initialize(std::string name, costmap_2d::Costmap2DROS
     private_nh.param("threshold_point_on_line", threshold_point_on_line_, threshold_point_on_line_);
     dynamic_config_server_.reset(new dynamic_reconfigure::Server<SegmentGlobalPlannerConfig>(private_nh)); //setup dynamic reconfigure
     dynamic_config_server_->setCallback(boost::bind(&SegmentGlobalPlanner::reconfigureCB, this, _1, _2));
-    clear_trajectory_server_=private_nh.advertiseService("clear_trajectory",
-                                                         &SegmentGlobalPlanner::clearTrajectoryCB, this); //setup clear trajectory service
+    clear_trajectory_server_ = private_nh.advertiseService("clear_trajectory",
+                                                           &SegmentGlobalPlanner::clearTrajectoryCB, this); //setup clear trajectory service
+    replan_sub_ = private_nh.subscribe("/replan_segment", 5, &SegmentGlobalPlanner::replanCB, this);
     global_frame_ = costmap_ros->getGlobalFrameID();
     return;
 }
@@ -203,14 +227,26 @@ void SegmentGlobalPlanner::clickedPointCB(const geometry_msgs::PointStamped::Con
             publish_goal.pose.orientation.w = 1.0; //default orientation
         }
     }
+    clicked_a_new_goal_ = true;
     pose_from_clicked_point_pub_.publish(publish_goal);
 }
 
-void SegmentGlobalPlanner::addNewSegment(const std::vector<geometry_msgs::PoseStamped>& new_plan)
+void SegmentGlobalPlanner::addNewSegment(std::vector<geometry_msgs::PoseStamped>& new_plan)
 {
-    if (!segment_list_.empty()) //change the orientation of the last pose of the last segment
+    int point_number_to_estimate_orientation = std::min<int>(5, new_plan.size());
+    if (clicked_a_new_goal_) //need to set new_plan's goal orientation
     {
-        int point_number_to_estimate_orientation = std::min<int>(5, new_plan.size());
+        if (point_number_to_estimate_orientation >= 2) //estimate the orientation with the last several points of new_plan
+        {
+            double estimated_yaw = std::atan2(new_plan.back().pose.position.y - new_plan[new_plan.size() - point_number_to_estimate_orientation].pose.position.y,
+                                              new_plan.back().pose.position.x - new_plan[new_plan.size() - point_number_to_estimate_orientation].pose.position.x);
+            tf2::Quaternion tf2q(tf2::Vector3(0.0, 0.0, 1.0), estimated_yaw);
+            new_plan.back().pose.orientation = tf2::toMsg(tf2q);
+        }
+        clicked_a_new_goal_ = false;
+    }
+    if (!segment_list_.empty()) //change the orientation of the goal of the last segment according to new_plan
+    {
         if (point_number_to_estimate_orientation >= 2) //estimate the orientation with the first several points of new_plan
         {
             double estimated_yaw = std::atan2(new_plan[point_number_to_estimate_orientation - 1].pose.position.y - new_plan.front().pose.position.y,
@@ -227,7 +263,7 @@ void SegmentGlobalPlanner::addNewSegment(const std::vector<geometry_msgs::PoseSt
     {
         segment_goal_ = new_plan.back();
     }
-    segment_list_.emplace_back(new_plan); //add a new plan to the segment list
+    segment_list_.push_back(new_plan); //add a new plan to the segment list
     final_goal_ = new_plan.back(); //update final goal
     return;
 }
@@ -259,5 +295,27 @@ bool SegmentGlobalPlanner::findDistLessThresh(const geometry_msgs::PoseStamped& 
         }
     }
     return false;
+}
+
+void SegmentGlobalPlanner::replanCB(const std_msgs::Bool::ConstPtr& ptr)
+{
+    if (ptr->data)
+    {
+        replan_ = true;
+        ROS_INFO("Ready to replan segment.");
+    }
+    return;
+}
+
+void SegmentGlobalPlanner::displayPath()
+{
+    nav_msgs::Path display_path; //path to be published
+    display_path.header.frame_id = global_frame_;
+    for (auto& segment : segment_list_)
+    {
+        std::copy(segment.begin(), segment.end(), std::back_inserter(display_path.poses));
+    }
+    plan_pub_.publish(display_path);
+    return;
 }
 }

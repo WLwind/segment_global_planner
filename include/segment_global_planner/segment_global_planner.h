@@ -4,10 +4,12 @@
 #include <list>
 #include <string>
 #include <queue>
+#include <atomic>
 #include <ros/ros.h>
 #include <dynamic_reconfigure/server.h>
 #include <nav_msgs/Path.h>
 #include <std_srvs/Empty.h>
+#include <std_msgs/Bool.h>
 #include <geometry_msgs/PointStamped.h>
 #include <nav_core/base_global_planner.h>
 #include <base_local_planner/costmap_model.h>
@@ -67,7 +69,7 @@ private:
      * @brief Add a new segment to the segment_list_
      * @param new_plan New segment
      */
-    void addNewSegment(const std::vector<geometry_msgs::PoseStamped>& new_plan);
+    void addNewSegment(std::vector<geometry_msgs::PoseStamped>& new_plan);
     /**
      * @brief Switch to next segment
      */
@@ -79,7 +81,15 @@ private:
      * @return True if find a less distance
      */
     bool findDistLessThresh(const geometry_msgs::PoseStamped& point, const std::vector<geometry_msgs::PoseStamped>& segment);
-    
+    /**
+     * @brief To replan current segment when makePlan() is called
+     */
+    void replanCB(const std_msgs::Bool::ConstPtr& ptr);
+    /**
+     * @brief Publish path for display
+     */
+    void displayPath();
+
     double threshold_point_on_line_ { 0.1 }; //to determine whether a point is on the line
     double point_interval_ { 0.05 }; //distance between two points on a segment
     double goal_threshold_ { 0.2 }; //goal threshold
@@ -89,7 +99,7 @@ private:
     std::unique_ptr<dynamic_reconfigure::Server<SegmentGlobalPlannerConfig>> dynamic_config_server_; //server pointer for dynamic reconfigure
     ros::ServiceServer clear_trajectory_server_; //service for clearing trajectory
     ros::Publisher pose_from_clicked_point_pub_ { ros::NodeHandle().advertise<geometry_msgs::PoseStamped>("/move_base_simple/goal", 10) }; //publish the goal pose when the clicked_point has been received
-    ros::Subscriber clicked_point_sub_ { ros::NodeHandle().subscribe<geometry_msgs::PointStamped>("/clicked_point", 10, &SegmentGlobalPlanner::clickedPointCB, this) }; //rviz clicked_point subscriber
+    ros::Subscriber clicked_point_sub_ { ros::NodeHandle().subscribe("/clicked_point", 10, &SegmentGlobalPlanner::clickedPointCB, this) }; //rviz clicked_point subscriber
     tf2_ros::Buffer tf_buffer_ { ros::Duration(5.0) };
     tf2_ros::TransformListener tf_ { tf_buffer_ };
     std::list<std::vector<geometry_msgs::PoseStamped>> segment_list_; //stores segments going to be tracked
@@ -98,5 +108,8 @@ private:
     bool final_goal_reached_ { true }; //whether final goal is reached
     bool got_first_goal { false }; //first goal mark
     std::vector<geometry_msgs::PoseStamped> last_segment_; //for reaching final goal, when segment_list_ is empty
+    std::atomic_bool replan_ { false }; //replan flag
+    ros::Subscriber replan_sub_; //to trigger replanning current segment
+    bool clicked_a_new_goal_ { false }; //using topic "/clicked_point" setting a new goal
 };
 }
