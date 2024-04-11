@@ -144,7 +144,6 @@ void SegmentGlobalPlanner::initialize(std::string name, costmap_2d::Costmap2DROS
 
     plan_pub_=private_nh.advertise<nav_msgs::Path>("plan", 1);
     private_nh.param("child_goal_threshold", goal_threshold_, goal_threshold_);
-    private_nh.param("point_interval", point_interval_, point_interval_);
     private_nh.param("threshold_point_on_line", threshold_point_on_line_, threshold_point_on_line_);
     dynamic_config_server_.reset(new dynamic_reconfigure::Server<SegmentGlobalPlannerConfig>(private_nh)); //setup dynamic reconfigure
     dynamic_config_server_->setCallback(boost::bind(&SegmentGlobalPlanner::reconfigureCB, this, _1, _2));
@@ -187,9 +186,8 @@ bool SegmentGlobalPlanner::isChildGoalReached()
 void SegmentGlobalPlanner::reconfigureCB(segment_global_planner::SegmentGlobalPlannerConfig& config, uint32_t level)
 {
     ROS_INFO("dynamic_reconfigure updates.");
-    threshold_point_on_line_=config.threshold_point_on_line;
-    point_interval_=config.point_interval;
-    goal_threshold_=config.child_goal_threshold;
+    threshold_point_on_line_ = config.threshold_point_on_line;
+    goal_threshold_ = config.child_goal_threshold;
     return;
 }
 

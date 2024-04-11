@@ -91,7 +91,6 @@ private:
     void displayPath();
 
     double threshold_point_on_line_ { 0.1 }; //to determine whether a point is on the line
-    double point_interval_ { 0.05 }; //distance between two points on a segment
     double goal_threshold_ { 0.2 }; //goal threshold
     std::string global_frame_ { "map" }; //global frame id
     ros::Publisher plan_pub_; //display path publisher
